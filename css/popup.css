@@ -1,0 +1,8 @@
+html,
+body {
+    width: 450px;
+    height: 200px;
+}
+body {
+    padding: 1em;
+}
