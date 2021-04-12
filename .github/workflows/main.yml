@@ -1,13 +1,8 @@
 name: CI
 
-# Controls when the action will run. 
-on:
-  # Triggers the workflow on push or pull request events but only for the main branch
-  push:
-    branches: [ main ]
-
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+on: 
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -17,10 +12,16 @@ jobs:
       - name: Zip Release
         uses: TheDoctor0/zip-release@0.4.1
         with:
-          filename: 'patreon-downloader.zip'
+          filename: 'patreon-downloader-${{github.event.release.tag_name}}.zip'
           exclusions: '*.git*'
       - name: Upload Release
         uses: ncipollo/release-action@v1
         with:
-            artifacts: "patreon-downloader.zip"
-            token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true # Set this to false if you want to prevent updating existing releases
+          artifacts: "patreon-downloader*.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: ${{ github.event.release.name }}
+          tag: ${{ github.event.release.tag_name }}
+          body: ${{ github.event.release.body }}
+          draft: false
+          prerelease: false
