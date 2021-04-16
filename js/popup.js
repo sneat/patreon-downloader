@@ -1,3 +1,115 @@
+class ChromeDownloader {
+  /**
+   * ChromeDownloader manages a maximum concurrent number of download requests (Semaphore)
+   * @param {Number} maxConcurrentRequests
+   */
+  constructor(maxConcurrentRequests = 1) {
+    this.requests = [];
+    this.running = 0;
+    this.max = maxConcurrentRequests;
+    this.callbackComplete = null;
+    this.callbackBeginDownload = null;
+  }
+
+  /**
+   * A callback to trigger when there are no more pending downloads.
+   * @param {Function} func
+   */
+  OnComplete(func) {
+    if (typeof func === 'function') {
+      this.callbackComplete = func;
+    }
+  }
+
+  /**
+   * A callback to trigger when a download starts.
+   * @param func
+   */
+  OnBeginDownload(func) {
+    if (typeof func === 'function') {
+      this.callbackBeginDownload = func;
+    }
+  }
+
+  /**
+   * Request a download.
+   * @see {@link https://developer.chrome.com/docs/extensions/reference/downloads/#method-download} for request details
+   * @param {Object} request
+   * @returns {Promise<Boolean>} Whether the download completed successfully.
+   */
+  Download(request) {
+    return new Promise((resolve, reject) => {
+      this.requests.push({
+        resolve,
+        reject,
+        request,
+      });
+      this.nextDownload();
+    });
+  }
+
+  /**
+   * Triggers the next download to start if it can.
+   */
+  nextDownload() {
+    if (!this.requests.length) {
+      if (typeof this.callbackComplete === 'function') {
+        this.callbackComplete();
+      }
+      return;
+    }
+    if (this.running < this.max) {
+      let {resolve, reject, request} = this.requests.shift();
+      this.running++;
+      new Promise(resolve => {
+        if (typeof this.callbackBeginDownload === 'function') {
+          this.callbackBeginDownload();
+        }
+        chrome.downloads.download(request, resolve);
+      }).then(downloadId => {
+        if (chrome.runtime.lastError) {
+          console.error('Patreon Downloader |', request.filename, downloadId, chrome.runtime.lastError.message);
+        } else {
+          console.debug('Patreon Downloader |', `Download started: ${request.filename}`, downloadId);
+        }
+        this.onDownloadComplete(downloadId)
+          .then(success => {
+            if (success) {
+              console.debug('Patreon Downloader |', `Download finished: ${request.filename}`, downloadId);
+            } else {
+              console.debug('Patreon Downloader |', `Download failed: ${request.filename}`, downloadId);
+            }
+            resolve(success);
+          })
+          .catch(err => {
+            console.debug('Patreon Downloader |', `Download failed: ${request.filename}`, downloadId);
+            reject(err);
+          })
+          .finally(() => {
+            this.running--;
+            this.nextDownload();
+          });
+      });
+    }
+  }
+
+  /**
+   * Trigger a response when a download finishes successfully or when it is interrupted.
+   * @param {Number} downloadId The downloadId response from chrome.downloads.download
+   * @returns {Promise<Boolean>} Whether the download completed successfully.
+   */
+  onDownloadComplete(downloadId) {
+    return new Promise(resolve => {
+      chrome.downloads.onChanged.addListener(function onChanged({id, state}) {
+        if (id === downloadId && state && state.current !== 'in_progress') {
+          chrome.downloads.onChanged.removeListener(onChanged);
+          resolve(state.current === 'complete');
+        }
+      });
+    });
+  }
+}
+
 function isPatreonPostSite() {
   return chrome.tabs.query(
     {active: true, lastFocusedWindow: true},
@@ -73,7 +185,7 @@ function parsePatreonData(tabId) {
       });
 
       downloadLink.prop('disabled', false);
-      downloadLink.text(`Download ${files.length} items`);
+      downloadLink.text(`Download ${files.length + 1} items`);
     }
     console.debug('Patreon Downloader | Files', files);
 
@@ -87,23 +199,18 @@ function parsePatreonData(tabId) {
         return;
       }
 
-      for (let i = 0; i < files.length; i++) {
-        const req = {
-          filename: files[i].filename,
-          url: files[i].url,
-        };
-        if (prefix) {
-          req.filename = `${prefix}/${req.filename}`;
-        }
+      downloadLink.prop('disabled', true);
+      downloadLink.text(`Downloading 0/${files.length + 1} items`);
 
-        chrome.downloads.download(req, (id) => {
-          if (chrome.runtime.lastError) {
-            console.error('Patreon Downloader |', req.filename, id, chrome.runtime.lastError.message);
-          } else {
-            console.debug('Patreon Downloader |', `Download started: ${req.filename}`, id);
-          }
-        });
-      }
+      const throttler = new ChromeDownloader(3);
+      throttler.OnComplete(function () {
+        downloadLink.text('Completed.');
+      });
+      let count = 0;
+      throttler.OnBeginDownload(function () {
+        count++;
+        downloadLink.text(`Downloading ${count}/${files.length + 1} items`);
+      });
 
       let content = [
         `<h1>${contentData.post.data.attributes.title}</h1>`,
@@ -123,13 +230,20 @@ function parsePatreonData(tabId) {
       if (prefix) {
         filename = `${prefix}/${filename}`;
       }
-      chrome.downloads.download({url: url, filename: filename}, (id) => {
-        if (chrome.runtime.lastError) {
-          console.error('Patreon Downloader |', req.filename, id, chrome.runtime.lastError.message);
-        } else {
-          console.debug('Patreon Downloader |', `Download started: ${filename}`, id);
+
+      throttler.Download({url: url, filename: filename});
+
+      for (let i = 0; i < files.length; i++) {
+        const req = {
+          filename: files[i].filename,
+          url: files[i].url,
+        };
+        if (prefix) {
+          req.filename = `${prefix}/${req.filename}`;
         }
-      });
+
+        throttler.Download(req);
+      }
     });
   });
 }
