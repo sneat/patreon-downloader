@@ -1,9 +1,9 @@
 {
-  "manifest_version": 3,
+  "manifest_version": 2,
   "name": "Patreon Downloader",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Download media and attachments from Patreon pages.",
-  "action": {
+  "page_action": {
     "default_title": "Patreon Downloader",
     "default_popup": "popup.html",
     "default_icon": {
@@ -30,11 +30,12 @@
     }
   ],
   "background": {
-    "service_worker": "background.js"
+    "scripts": ["background.js"]
   },
   "permissions": [
     "storage",
     "tabs",
-    "downloads"
+    "downloads",
+    "declarativeContent"
   ]
 }

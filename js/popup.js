@@ -1,114 +1,26 @@
-class ChromeDownloader {
-  /**
-   * ChromeDownloader manages a maximum concurrent number of download requests (Semaphore)
-   * @param {Number} maxConcurrentRequests
-   */
-  constructor(maxConcurrentRequests = 1) {
-    this.requests = [];
-    this.running = 0;
-    this.max = maxConcurrentRequests;
-    this.callbackComplete = null;
-    this.callbackBeginDownload = null;
+const downloadLink = $('#download-link');
+
+const port = chrome.extension.connect({
+  name: 'Patreon Downloader',
+});
+port.postMessage({type: 'whoAmI'});
+port.onMessage.addListener(function (msg) {
+  if (typeof msg !== 'object' || !msg?.type) {
+    return;
   }
 
-  /**
-   * A callback to trigger when there are no more pending downloads.
-   * @param {Function} func
-   */
-  OnComplete(func) {
-    if (typeof func === 'function') {
-      this.callbackComplete = func;
-    }
-  }
-
-  /**
-   * A callback to trigger when a download starts.
-   * @param func
-   */
-  OnBeginDownload(func) {
-    if (typeof func === 'function') {
-      this.callbackBeginDownload = func;
-    }
-  }
-
-  /**
-   * Request a download.
-   * @see {@link https://developer.chrome.com/docs/extensions/reference/downloads/#method-download} for request details
-   * @param {Object} request
-   * @returns {Promise<Boolean>} Whether the download completed successfully.
-   */
-  Download(request) {
-    return new Promise((resolve, reject) => {
-      this.requests.push({
-        resolve,
-        reject,
-        request,
-      });
-      this.nextDownload();
-    });
-  }
-
-  /**
-   * Triggers the next download to start if it can.
-   */
-  nextDownload() {
-    if (!this.requests.length) {
-      if (typeof this.callbackComplete === 'function') {
-        this.callbackComplete();
+  switch (msg.type) {
+    case 'complete':
+      downloadLink.text('Completed.');
+      break;
+    case 'downloadUpdate':
+      if (typeof msg.count === 'number' && typeof msg.total === 'number' && msg.total) {
+        downloadLink.prop('disabled', true);
+        downloadLink.text(`Downloading ${msg.count}/${msg.total} items...`);
       }
-      return;
-    }
-    if (this.running < this.max) {
-      let {resolve, reject, request} = this.requests.shift();
-      this.running++;
-      new Promise(resolve => {
-        if (typeof this.callbackBeginDownload === 'function') {
-          this.callbackBeginDownload();
-        }
-        chrome.downloads.download(request, resolve);
-      }).then(downloadId => {
-        if (chrome.runtime.lastError) {
-          console.error('Patreon Downloader |', request.filename, downloadId, chrome.runtime.lastError.message);
-        } else {
-          console.debug('Patreon Downloader |', `Download started: ${request.filename}`, downloadId);
-        }
-        this.onDownloadComplete(downloadId)
-          .then(success => {
-            if (success) {
-              console.debug('Patreon Downloader |', `Download finished: ${request.filename}`, downloadId);
-            } else {
-              console.debug('Patreon Downloader |', `Download failed: ${request.filename}`, downloadId);
-            }
-            resolve(success);
-          })
-          .catch(err => {
-            console.debug('Patreon Downloader |', `Download failed: ${request.filename}`, downloadId);
-            reject(err);
-          })
-          .finally(() => {
-            this.running--;
-            this.nextDownload();
-          });
-      });
-    }
+      break;
   }
-
-  /**
-   * Trigger a response when a download finishes successfully or when it is interrupted.
-   * @param {Number} downloadId The downloadId response from chrome.downloads.download
-   * @returns {Promise<Boolean>} Whether the download completed successfully.
-   */
-  onDownloadComplete(downloadId) {
-    return new Promise(resolve => {
-      chrome.downloads.onChanged.addListener(function onChanged({id, state}) {
-        if (id === downloadId && state && state.current !== 'in_progress') {
-          chrome.downloads.onChanged.removeListener(onChanged);
-          resolve(state.current === 'complete');
-        }
-      });
-    });
-  }
-}
+});
 
 function isPatreonPostSite() {
   return chrome.tabs.query(
@@ -119,7 +31,7 @@ function isPatreonPostSite() {
         return;
       }
       const url = tabs[0].url;
-      if (url.indexOf('https://www.patreon.com/posts/') > -1) {
+      if (url && url.indexOf('https://www.patreon.com/posts/') > -1) {
         $('#not-patreon-site').hide();
         $('#patreon-site').show();
         parsePatreonData(tabId);
@@ -137,15 +49,18 @@ function parsePatreonData(tabId) {
       console.error('Patreon Downloader | No post data found.');
       return;
     }
+    window.setInterval(function () {
+      port.postMessage({type: 'status'});
+    }, 2500);
+
     contentData = contentData[tabId];
     console.debug('Patreon Downloader | Raw post data', contentData);
 
-    if (!contentData || !contentData.post || !contentData.post.data || !contentData.post.data.attributes) {
+    if (!contentData?.post?.data?.attributes) {
       console.error('Patreon Downloader | Invalid post data found.');
       return;
     }
 
-    const downloadLink = $('#download-link');
     let text = contentData.post.data.attributes.title;
 
     const campaignData = contentData.post.included.filter(o => o.type === 'campaign').map(o => {
@@ -185,9 +100,12 @@ function parsePatreonData(tabId) {
       });
 
       downloadLink.prop('disabled', false);
+      // One extra file due to the post description file.
       downloadLink.text(`Download ${files.length + 1} items`);
     }
     console.debug('Patreon Downloader | Files', files);
+    // Check for existing downloads.
+    port.postMessage({type: 'status'});
 
     $('#download').submit(e => {
       e.preventDefault();
@@ -200,17 +118,6 @@ function parsePatreonData(tabId) {
       }
 
       downloadLink.prop('disabled', true);
-      downloadLink.text(`Downloading 0/${files.length + 1} items`);
-
-      const throttler = new ChromeDownloader(3);
-      throttler.OnComplete(function () {
-        downloadLink.text('Completed.');
-      });
-      let count = 0;
-      throttler.OnBeginDownload(function () {
-        count++;
-        downloadLink.text(`Downloading ${count}/${files.length + 1} items`);
-      });
 
       let content = [
         `<h1>${contentData.post.data.attributes.title}</h1>`,
@@ -231,7 +138,8 @@ function parsePatreonData(tabId) {
         filename = `${prefix}/${filename}`;
       }
 
-      throttler.Download({url: url, filename: filename});
+      const requests = [];
+      requests.push({url: url, filename: filename});
 
       for (let i = 0; i < files.length; i++) {
         const req = {
@@ -241,9 +149,10 @@ function parsePatreonData(tabId) {
         if (prefix) {
           req.filename = `${prefix}/${req.filename}`;
         }
-
-        throttler.Download(req);
+        requests.push(req);
       }
+
+      port.postMessage({type: 'download', requests: requests});
     });
   });
 }
