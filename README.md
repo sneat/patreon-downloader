@@ -16,7 +16,7 @@ Simply change the folder name to suit you, or delete it entirely if you want to 
 
 ## Install
 
-Download from the Chrome Web Store.
+Download from the [Chrome Web Store](https://chrome.google.com/webstore/detail/patreon-downloader/mnfjhjpninhcccbahcdbcphpifofoajc?hl=en-GB).
 
 Alternatively: 
 
