@@ -105,7 +105,7 @@ class ChromeDownloader {
   onDownloadComplete(downloadId) {
     return new Promise(resolve => {
       chrome.downloads.onChanged.addListener(function onChanged({id, state}) {
-        if (id === downloadId && state?.current !== 'in_progress') {
+        if (id === downloadId && state && state.current !== 'in_progress') {
           chrome.downloads.onChanged.removeListener(onChanged);
           resolve(state.current === 'complete');
         }

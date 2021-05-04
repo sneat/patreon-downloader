@@ -142,8 +142,16 @@ function parsePatreonData(tabId) {
       requests.push({url: url, filename: filename});
 
       for (let i = 0; i < files.length; i++) {
+        let filename = files[i].filename;
+        try {
+          // Handle full urls as the filename, pull the final segment out
+          const url = new URL(filename);
+          filename = url.pathname.split(/[\\/]/).pop();
+        } catch (e) {
+          // Carry on with the standard filename
+        }
         const req = {
-          filename: files[i].filename,
+          filename: filename,
           url: files[i].url,
         };
         if (prefix) {
