@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Patreon Downloader",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Download media and attachments from Patreon pages.",
   "page_action": {
     "default_title": "Patreon Downloader",
@@ -36,6 +36,7 @@
     "storage",
     "tabs",
     "downloads",
-    "declarativeContent"
+    "declarativeContent",
+    "unlimitedStorage"
   ]
 }
