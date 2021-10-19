@@ -8,7 +8,7 @@ try {
         if (chrome.runtime.lastError) {
           console.error('Patreon Downloader | Failed to set data for tab.', tabId.tab, data, chrome.runtime.lastError.message);
         } else {
-          console.debug('Patreon Downloader | Set page data.', tabId.tab, data);
+          console.log('Patreon Downloader | Set page data.', tabId.tab, data);
         }
       });
     } catch (e) {

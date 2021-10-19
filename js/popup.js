@@ -54,7 +54,7 @@ function parsePatreonData(tabId) {
     }, 2500);
 
     contentData = contentData[tabId];
-    console.debug('Patreon Downloader | Raw post data', contentData);
+    console.log('Patreon Downloader | Raw post data', contentData);
 
     if (!contentData?.post?.data?.attributes) {
       console.error('Patreon Downloader | Invalid post data found.');
@@ -94,6 +94,13 @@ function parsePatreonData(tabId) {
         return out;
       },
     );
+    if (contentData.post.data.attributes?.post_type === 'video_external_file' && contentData.post.data.attributes?.post_file?.url) {
+      let filename = new URL(contentData.post.data.attributes.post_file.url).pathname.split('/').pop() || 'video';
+      files.push({
+        filename,
+        url: contentData.post.data.attributes.post_file.url,
+      });
+    }
     if (files.length) {
       files.sort((a, b) => {
         return a.filename.localeCompare(b.filename);
@@ -103,7 +110,7 @@ function parsePatreonData(tabId) {
       // One extra file due to the post description file.
       downloadLink.text(`Download ${files.length + 1} items`);
     }
-    console.debug('Patreon Downloader | Files', files);
+    console.log('Patreon Downloader | Files', files);
     // Check for existing downloads.
     port.postMessage({type: 'status'});
 
