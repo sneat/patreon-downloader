@@ -70,6 +70,7 @@ function parsePatreonData(tabId) {
     if (campaignData.length) {
       postUser.name = campaignData[0].name;
       postUser.url = campaignData[0].url;
+      postUser.avatarUrl = campaignData[0].avatar_photo_url;
       if (postUser.name) {
         text = `${postUser.name}-${text}`;
       }
@@ -99,6 +100,17 @@ function parsePatreonData(tabId) {
       files.push({
         filename,
         url: contentData.post.data.attributes.post_file.url,
+      });
+    }
+    if (postUser.avatarUrl) {
+      let filename = new URL(postUser.avatarUrl).pathname.split('/').pop();
+      let extension = filename.split('.').pop();
+      if (!extension) {
+        extension = 'png';
+      }
+      files.push({
+        filename: `avatar.${extension}`,
+        url: postUser.avatarUrl,
       });
     }
     if (files.length) {
