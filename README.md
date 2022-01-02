@@ -25,3 +25,10 @@ Alternatively:
 3. Check the Developer mode checkbox
 4. Click on the Load unpacked extension button
 5. Select the folder you unzipped the release into
+
+## Help
+
+To get help using Patreon Downloader you can do one of the following:
+
+1. Join the [Discord Server](https://discord.gg/NQkFhnxcqC)
+2. Submit an [Issue](https://github.com/sneat/patreon-downloader/issues)
