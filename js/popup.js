@@ -1,4 +1,10 @@
 const downloadLink = $('#download-link');
+const includeAvatar = $('#include_avatar');
+const includeDescription = $('#include_description');
+let files = [];
+
+includeAvatar.change(updateDownloadCount);
+includeDescription.change(updateDownloadCount);
 
 const port = chrome.extension.connect({
   name: 'Patreon Downloader',
@@ -43,6 +49,20 @@ function isPatreonPostSite() {
   );
 }
 
+function updateDownloadCount() {
+  let count = files.length;
+  if (includeAvatar.is(':checked')) {
+    count += 1;
+  }
+  if (includeDescription.is(':checked')) {
+    count += 1;
+  }
+  if (count) {
+    downloadLink.prop('disabled', false);
+    downloadLink.text(`Download ${count} ${count === 1 ? 'file' : 'files'}`);
+  }
+}
+
 function parsePatreonData(tabId) {
   chrome.storage.local.get(tabId, function (contentData) {
     if (!contentData || !contentData[tabId]) {
@@ -77,7 +97,7 @@ function parsePatreonData(tabId) {
     }
     $('#folder-name').prop('value', slugify(text));
 
-    const files = contentData.post.included.filter(o => o.type === 'media' || o.type === 'attachment').map(o => {
+    files = contentData.post.included.filter(o => o.type === 'media' || o.type === 'attachment').map(o => {
         let out = {
           filename: null,
           url: null,
@@ -102,26 +122,12 @@ function parsePatreonData(tabId) {
         url: contentData.post.data.attributes.post_file.url,
       });
     }
-    if (postUser.avatarUrl) {
-      let filename = new URL(postUser.avatarUrl).pathname.split('/').pop();
-      let extension = filename.split('.').pop();
-      if (!extension) {
-        extension = 'png';
-      }
-      files.push({
-        filename: `avatar.${extension}`,
-        url: postUser.avatarUrl,
-      });
-    }
-    if (files.length) {
-      files.sort((a, b) => {
-        return a.filename.localeCompare(b.filename);
-      });
 
-      downloadLink.prop('disabled', false);
-      // One extra file due to the post description file.
-      downloadLink.text(`Download ${files.length + 1} items`);
-    }
+    updateDownloadCount();
+
+    files.sort((a, b) => {
+      return a.filename.localeCompare(b.filename);
+    });
     console.log('Patreon Downloader | Files', files);
     // Check for existing downloads.
     port.postMessage({type: 'status'});
@@ -138,36 +144,62 @@ function parsePatreonData(tabId) {
 
       downloadLink.prop('disabled', true);
 
-      let content = [
-        `<h1>${contentData.post.data.attributes.title}</h1>`,
-      ];
-      if (postUser.name && postUser.url) {
+      const requests = [];
+
+      if (includeDescription.prop('checked')) {
+        let content = [
+          `<h1>${contentData.post.data.attributes.title}</h1>`,
+        ];
+        if (postUser.name && postUser.url) {
+          content.push(
+            `<p>by <a href="${postUser.url}">${postUser.name}</a></p>`,
+          );
+        }
         content.push(
-          `<p>by <a href="${postUser.url}">${postUser.name}</a></p>`,
+          contentData.post.data.attributes.content,
+          `<p><a href="${contentData.post.data.attributes.url}">${contentData.post.data.attributes.url}</a>`,
         );
-      }
-      content.push(
-        contentData.post.data.attributes.content,
-        `<p><a href="${contentData.post.data.attributes.url}">${contentData.post.data.attributes.url}</a>`,
-      );
-      let blob = new Blob(content, {type: 'text/html'});
-      let url = URL.createObjectURL(blob);
-      let filename = 'description.html';
-      if (prefix) {
-        filename = `${prefix}/${filename}`;
+        let blob = new Blob(content, {type: 'text/html'});
+        let url = URL.createObjectURL(blob);
+        let filename = 'description.html';
+        if (prefix) {
+          filename = `${prefix}/${filename}`;
+        }
+        requests.push({url: url, filename: filename});
       }
 
-      const requests = [];
-      requests.push({url: url, filename: filename});
+      if (postUser.avatarUrl && includeAvatar.prop('checked')) {
+        let filename = new URL(postUser.avatarUrl).pathname.split('/').pop();
+        let extension = filename.split('.').pop();
+        if (!extension) {
+          extension = 'png';
+        }
+        let file = `avatar.${extension}`
+        if (prefix) {
+          file = `${prefix}/${file}`;
+        }
+        requests.push({
+          filename: file,
+          url: postUser.avatarUrl,
+        });
+      }
 
       for (let i = 0; i < files.length; i++) {
         let filename = files[i].filename;
-        try {
-          // Handle full urls as the filename, pull the final segment out
-          const url = new URL(filename);
-          filename = url.pathname.split(/[\\/]/).pop();
-        } catch (e) {
-          // Carry on with the standard filename
+        if (filename.startsWith('http')) {
+          try {
+            // Handle full urls as the filename, pull the final segment out
+            const url = new URL(filename);
+            filename = url.pathname.split(/[\\/]/).pop();
+          } catch (e) {
+            // Try parsing the url as the filename
+            try {
+              const url = new URL(files[i].url);
+              filename = url.pathname.split(/[\\/]/).pop();
+            } catch (e) {
+              // Carry on with the standard filename
+            }
+          }
         }
         const req = {
           filename: filename,
