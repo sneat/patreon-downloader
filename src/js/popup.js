@@ -1,31 +1,25 @@
 const downloadLink = $('#download-link');
 const includeAvatar = $('#include_avatar');
 const includeDescription = $('#include_description');
+const downloadSpeed = $('#download-speed');
 let files = [];
 
 includeAvatar.change(updateDownloadCount);
 includeDescription.change(updateDownloadCount);
 
-const port = chrome.extension.connect({
-  name: 'Patreon Downloader',
-});
-port.postMessage({type: 'whoAmI'});
-port.onMessage.addListener(function (msg) {
-  if (typeof msg !== 'object' || !msg?.type) {
-    return;
-  }
-
-  switch (msg.type) {
-    case 'complete':
-      downloadLink.text('Completed.');
-      break;
+chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+  switch (message.type) {
     case 'downloadUpdate':
-      if (typeof msg.count === 'number' && typeof msg.total === 'number' && msg.total) {
-        downloadLink.prop('disabled', true);
-        downloadLink.text(`Downloading ${msg.count}/${msg.total} items...`);
+      if (message.speed) {
+        downloadSpeed.text(`Downloading: ${HumanFileSize(message.speed)}/s`);
       }
       break;
+    case 'downloadComplete':
+      downloadSpeed.text('Complete!');
+      break;
   }
+  sendResponse();
+  return true;
 });
 
 function isPatreonPostSite() {
@@ -37,6 +31,7 @@ function isPatreonPostSite() {
         return;
       }
       const url = tabs[0].url;
+      console.log(tabs, url);
       if (url && url.indexOf('https://www.patreon.com/posts/') > -1) {
         $('#not-patreon-site').hide();
         $('#patreon-site').show();
@@ -60,6 +55,9 @@ function updateDownloadCount() {
   if (count) {
     downloadLink.prop('disabled', false);
     downloadLink.text(`Download ${count} ${count === 1 ? 'file' : 'files'}`);
+    chrome.tabs.query({active: true, currentWindow: true}, function (tabs) {
+      chrome.tabs.sendMessage(tabs[0].id, ['Patreon Downloader | Files', files]);
+    });
   }
 }
 
@@ -69,9 +67,6 @@ function parsePatreonData(tabId) {
       console.error('Patreon Downloader | No post data found.');
       return;
     }
-    window.setInterval(function () {
-      port.postMessage({type: 'status'});
-    }, 2500);
 
     contentData = contentData[tabId];
     console.log('Patreon Downloader | Raw post data', contentData);
@@ -95,7 +90,7 @@ function parsePatreonData(tabId) {
         text = `${postUser.name}-${text}`;
       }
     }
-    $('#folder-name').prop('value', slugify(text));
+    $('#zip-name').prop('value', `${slugify(text)}.zip`);
 
     files = contentData.post.included.filter(o => o.type === 'media' || o.type === 'attachment').map(o => {
         let out = {
@@ -129,13 +124,9 @@ function parsePatreonData(tabId) {
       return a.filename.localeCompare(b.filename);
     });
     console.log('Patreon Downloader | Files', files);
-    // Check for existing downloads.
-    port.postMessage({type: 'status'});
 
     $('#download').submit(e => {
       e.preventDefault();
-
-      const prefix = $('#folder-name').val();
 
       if (!files.length) {
         console.info('Patreon Downloader | No files to download.');
@@ -162,9 +153,6 @@ function parsePatreonData(tabId) {
         let blob = new Blob(content, {type: 'text/html'});
         let url = URL.createObjectURL(blob);
         let filename = 'description.html';
-        if (prefix) {
-          filename = `${prefix}/${filename}`;
-        }
         requests.push({url: url, filename: filename});
       }
 
@@ -174,10 +162,7 @@ function parsePatreonData(tabId) {
         if (!extension) {
           extension = 'png';
         }
-        let file = `avatar.${extension}`
-        if (prefix) {
-          file = `${prefix}/${file}`;
-        }
+        let file = `avatar.${extension}`;
         requests.push({
           filename: file,
           url: postUser.avatarUrl,
@@ -205,15 +190,51 @@ function parsePatreonData(tabId) {
           filename: filename,
           url: files[i].url,
         };
-        if (prefix) {
-          req.filename = `${prefix}/${req.filename}`;
-        }
         requests.push(req);
       }
 
-      port.postMessage({type: 'download', requests: requests});
+      chrome.tabs.query({active: true, currentWindow: true}, function (tabs) {
+        let zipName = $('#zip-name').val() || 'archive.zip';
+        if (!zipName.endsWith('.zip')) {
+          zipName += '.zip';
+        }
+        chrome.tabs.sendMessage(tabs[0].id, {type: 'download', requests, zipName});
+      });
     });
   });
+}
+
+/**
+ * Format bytes as human-readable text.
+ * @see https://stackoverflow.com/a/14919494/191306
+ * @param bytes Number of bytes.
+ * @param si True to use metric (SI) units, aka powers of 1000. False to use
+ *           binary (IEC), aka powers of 1024.
+ * @param dp Number of decimal places to display.
+ * @return {string} Formatted string.
+ */
+function HumanFileSize(bytes, si = true, dp = 1) {
+  const thresh = si ? 1000 : 1024;
+
+  if (Math.abs(bytes) < thresh) {
+    return bytes + ' B';
+  }
+
+  const units = si
+                ? ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+                : ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+  let u = -1;
+  const r = 10 ** dp;
+
+  do {
+    bytes /= thresh;
+    ++u;
+  } while (
+    Math.round(Math.abs(bytes) * r) / r >= thresh &&
+    u < units.length - 1
+    );
+
+  return bytes.toFixed(dp) + ' ' + units[u];
 }
 
 function slugify(text) {

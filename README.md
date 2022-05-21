@@ -6,13 +6,20 @@ Chrome Extension to easily download media and attachments from Patreon Posts.
 
 ## Usage
 
-When viewing a Patreon Post page, you can use the `Patreon Downloader` to quickly download all of the media and attachments from that post into a folder in your Downloads folder.
+When viewing a Patreon Post page, you can use the `Patreon Downloader` to quickly download all of the media and attachments from that post as a zip in your Downloads folder.
 
-The folder name will be pre-filled for you based on the Patreon creator's name and the title of the post.
+The zip file name will be pre-filled for you based on the Patreon creator's name and the title of the post.
 
-For example, if you were downloading from creator `JohnSmith` and the title of the post was `These are some of my favourite things...` you would be given a folder name of `johnsmith-these-are-some-of-my-favourite-things`.
+For example, if you were downloading from creator `JohnSmith` and the title of the post was `These are some of my favourite things...` you would be given a zip file called `johnsmith-these-are-some-of-my-favourite-things.zip`.
 
-Simply change the folder name to suit you, or delete it entirely if you want to download straight to your Downloads folder.
+Simply change the file name to suit you.
+
+## FAQ
+
+1. Can I use this to download every post a creator has ever made?
+   - "Yes", but probably not how you want. You will need to go to each page of the creator's posts and download them all individually.
+2. Can I download "private" posts? Or download posts that I don't have the appropriate access level to see on Patreon?
+   - No, you can only download assets that you would normally be able to manually click on and download.
 
 ## Install
 
