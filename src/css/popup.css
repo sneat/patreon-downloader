@@ -6,3 +6,7 @@ body {
 body {
     padding: 1em;
 }
+.subtle {
+    font-size: .875rem;
+    color: #6c757d;
+}

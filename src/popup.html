@@ -1,34 +1,42 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Patreon Downloader</title>
-  <link rel="stylesheet" href="css/bootstrap.min.css">
-  <link rel="stylesheet" href="css/popup.css">
+    <meta charset="UTF-8">
+    <title>Patreon Downloader</title>
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/popup.css">
 </head>
 <body class="text-center">
 <h1 class="cover-heading">Patreon Downloader</h1>
 <p class="lead" id="not-patreon-site">Only works on individual Patreon post pages.</p>
 <div class="lead" id="patreon-site">
-  <form id="download">
-    <fieldset>
-      <div>
-        <input type="text" id="zip-name" class="form-control">
-        <label for="zip-name" class="form-text">Provide a filename for the zip.</label>
-      </div>
-      <div>
-        <button id="download-link" type="submit" class="btn btn-primary btn-lg" disabled>Download</button>
-      </div>
-      <div>
-        <input type="checkbox" id="include_description" checked>
-        <label for="include_description" class="form-text">Download post details?</label>
-      </div>
-      <div>
-        <input type="checkbox" id="include_avatar">
-        <label for="include_avatar" class="form-text">Download avatar image?</label>
-      </div>
-    </fieldset>
-  </form>
+    <form id="download">
+        <fieldset>
+            <div>
+                <input type="text" id="zip-name" class="form-control">
+                <label for="zip-name" class="form-text">Provide a filename for the zip.</label>
+            </div>
+            <div>
+                <button id="download-link" type="submit" class="btn btn-primary btn-lg" disabled>Download</button>
+            </div>
+            <div>
+                <input type="checkbox" id="include_description" checked>
+                <label for="include_description" class="form-text">Download post details?</label>
+            </div>
+            <div>
+                <input type="checkbox" id="include_avatar">
+                <label for="include_avatar" class="form-text">Download avatar image?</label>
+            </div>
+            <div class="subtle">
+                <p>Note: Videos on Patreon are really hard to download properly.
+                    If you find they aren't working for you, try one of the HLS downloader extensions.
+                    I've had success with <a
+                            href="https://chrome.google.com/webstore/detail/live-stream-downloader/looepbdllpjgdmkpdcdffhdbmpbcfekj"
+                            target="_blank">Live Stream Downloader</a> before, but you might need a different one
+                    depending on the video format.</p>
+            </div>
+        </fieldset>
+    </form>
 </div>
 <div id="download-speed"></div>
 <script src="js/jquery-3.6.0.min.js"></script>
