@@ -1,19 +1,34 @@
+document.addEventListener('pd-bootstrap-data', function (e) {
+  console.log('Patreon Downloader | Received boostrap data.', e.detail);
+  setState(e.detail);
+});
+
+const s = document.createElement('script');
+s.src = chrome.runtime.getURL('src/patreon-downloader.js');
+s.onload = function() { this.remove(); };
+(document.head || document.documentElement).appendChild(s);
+
+let tab = null;
+
 chrome.runtime.sendMessage({type: 'whoAmI'}, tabId => {
+  tab = tabId.tab;
+});
+
+function setState(state) {
   try {
-    const payload = '{'.concat(document.documentElement.innerHTML.split('Object.assign(window.patreon.bootstrap, {')[1].split('\n});\n      Object.assign(window.patreon')[0], '}');
     const data = {};
-    data[tabId.tab.toString()] = JSON.parse(payload);
+    data[tab.toString()] = state;
     chrome.storage.local.set(data, function () {
       if (chrome.runtime.lastError) {
-        console.error('Patreon Downloader | Failed to set data for tab.', tabId.tab, data, chrome.runtime.lastError.message);
+        console.error('Patreon Downloader | Failed to set data for tab.', tab, data, chrome.runtime.lastError.message);
       } else {
-        console.log('Patreon Downloader | Set page data.', tabId.tab, data);
+        console.log('Patreon Downloader | Set page data.', tab, data);
       }
     });
   } catch (e) {
     console.error('Patreon Downloader |', e);
   }
-});
+}
 
 chrome.runtime.onMessage.addListener(
   function (msg, sender, sendResponse) {

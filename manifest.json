@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Patreon Downloader",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Download media and attachments from Patreon pages.",
   "action": {
     "default_title": "Patreon Downloader",
@@ -22,7 +22,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.patreon.com/posts/*"
+        "https://www.patreon.com/posts/*",
+        "https://patreon.com/posts/*"
       ],
       "js": [
         "src/contentScript.js",
@@ -32,6 +33,13 @@
       ]
     }
   ],
+  "web_accessible_resources": [{
+    "resources": ["src/patreon-downloader.js"],
+    "matches": [
+      "https://www.patreon.com/*",
+      "https://patreon.com/*"
+    ]
+  }],
   "background": {
     "service_worker": "src/background.js"
   },
