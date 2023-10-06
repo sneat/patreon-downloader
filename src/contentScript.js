@@ -1,6 +1,6 @@
 document.addEventListener('pd-bootstrap-data', function (e) {
   console.log('Patreon Downloader | Received boostrap data.', e.detail);
-  setState(e.detail);
+  setState(e.detail, 0);
 });
 
 const s = document.createElement('script');
@@ -14,7 +14,19 @@ chrome.runtime.sendMessage({type: 'whoAmI'}, tabId => {
   tab = tabId.tab;
 });
 
-function setState(state) {
+function setState(state, iteration) {
+  if (!tab) {
+    if (iteration > 5) {
+      console.error('Patreon Downloader | Failed to get tab ID.');
+      return;
+    }
+
+    setTimeout(() => {
+      setState(state, (iteration || 0) + 1);
+    }, 500);
+    return;
+  }
+
   try {
     const data = {};
     data[tab.toString()] = state;
