@@ -1,12 +1,13 @@
 # Patreon Downloader
 
 Chrome Extension to easily download media and attachments from Patreon Posts.
+Please note that most videos will not be included.
 
 ![Screenshot](https://raw.githubusercontent.com/sneat/patreon-downloader/main/screenshot/screenshot.png "Screenshot")
 
 ## Usage
 
-When viewing a Patreon Post page, you can use the `Patreon Downloader` to quickly download all of the media and attachments from that post as a zip in your Downloads folder.
+When viewing a Patreon Post page, you can use the `Patreon Downloader` to quickly download the media and attachments from that post as a zip in your Downloads folder.
 
 The zip file name will be pre-filled for you based on the Patreon creator's name and the title of the post.
 
@@ -39,3 +40,9 @@ To get help using Patreon Downloader you can do one of the following:
 
 1. Join the [Discord Server](https://discord.gg/NQkFhnxcqC)
 2. Submit an [Issue](https://github.com/sneat/patreon-downloader/issues)
+
+## Thanks
+
+Thank you to the following people for their help with this project:
+
+- herefromrdt
