@@ -146,9 +146,12 @@ function parsePatreonData(tabId) {
             `<p>by <a href="${postUser.url}">${postUser.name}</a></p>`,
           );
         }
+        const tags = contentData.post.included.filter((included) => included.type === "post_tag").map((included) => included.attributes.value)
         content.push(
-          contentData.post.data.attributes.content,
-          `<p><a href="${contentData.post.data.attributes.url}">${contentData.post.data.attributes.url}</a>`,
+          `<p id="publish-date">${contentData.post.data.attributes.published_at}</p>`,
+          contentData.post.data.attributes.content.replace('<p>', '<p id="content">'),
+          `<p id="tags">${tags.map((tag)=>`<span class="tag">${tag}</span>`).join(" | ")}</p>`,
+          `<p id="url"><a href="${contentData.post.data.attributes.url}">${contentData.post.data.attributes.url}</a></p>`,
         );
         let blob = new Blob(content, {type: 'text/html'});
         let url = URL.createObjectURL(blob);
