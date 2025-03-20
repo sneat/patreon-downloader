@@ -107,6 +107,17 @@ function parsePatreonData(tabId) {
             out.url = o.attributes.url;
             break;
         }
+        if (!out.filename && o.id) {
+          // Try parsing the url as the filename
+          try {
+            const url = new URL(out.url);
+            out.filename = `${o.id}-${url.pathname.split(/[\\/]/).pop()}`;
+          } catch (e) {
+            console.error(`Patreon Downloader | Error parsing URL ${out.url}`, e);
+            console.warn(`Patreon Downloader | Using ID ${o.id}.jpg as filename. This may not be correct and you may have to manually rename the file extension.`);
+            out.filename = `${o.id}.jpg`;
+          }
+        }
         return out;
       },
     );
