@@ -1,5 +1,5 @@
 document.addEventListener('pd-bootstrap-data', function (e) {
-  console.log('Patreon Downloader | Received boostrap data.', e.detail);
+  console.log('Patreon Downloader | Received bootstrap data.', e.detail);
   setState(e.detail, 0);
 });
 
@@ -10,7 +10,7 @@ s.onload = function() { this.remove(); };
 
 let tab = null;
 
-chrome.runtime.sendMessage({type: 'whoAmI'}, tabId => {
+chrome.runtime.sendMessage({type: 'whoAmI'}).then(tabId => {
   tab = tabId.tab;
 });
 
