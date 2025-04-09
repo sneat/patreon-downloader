@@ -150,7 +150,7 @@ function parsePatreonData(tabId) {
 
       if (includeDescription.prop('checked')) {
         let content = [
-          `<h1>${contentData.post.data.attributes.title}</h1>`,
+          `<h1 id="title">${contentData.post.data.attributes.title}</h1>`,
         ];
         if (postUser.name && postUser.url) {
           content.push(
