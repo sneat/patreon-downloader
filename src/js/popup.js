@@ -1,21 +1,26 @@
-const downloadLink = $('#download-link');
-const includeAvatar = $('#include_avatar');
-const includeDescription = $('#include_description');
-const downloadSpeed = $('#download-speed');
+const downloadLink = document.getElementById("download-link");
+const includeAvatar = document.getElementById("include_avatar");
+const includeDescription = document.getElementById("include_description");
+const downloadSpeed = document.getElementById("download-speed");
+const notPatreonSite = document.getElementById("not-patreon-site");
+const patreonSite = document.getElementById("patreon-site");
+const zipNameInput = document.getElementById("zip-name");
+const downloadForm = document.getElementById("download");
+
 let files = [];
 
-includeAvatar.change(updateDownloadCount);
-includeDescription.change(updateDownloadCount);
+includeAvatar?.addEventListener("change", updateDownloadCount);
+includeDescription?.addEventListener("change", updateDownloadCount);
 
-chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
   switch (message.type) {
-    case 'downloadUpdate':
+    case "downloadUpdate":
       if (message.speed) {
-        downloadSpeed.text(`Downloading: ${HumanFileSize(message.speed)}/s`);
+        if (downloadSpeed) downloadSpeed.textContent = `Downloading: ${HumanFileSize(message.speed)}/s`;
       }
       break;
-    case 'downloadComplete':
-      downloadSpeed.text('Complete!');
+    case "downloadComplete":
+      if (downloadSpeed) downloadSpeed.textContent = "Complete!";
       break;
   }
   sendResponse();
@@ -24,62 +29,68 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
 
 function isPatreonPostSite() {
   return chrome.tabs.query(
-    {active: true, lastFocusedWindow: true},
-    (tabs) => {
-      const tabId = tabs[0]?.id.toString();
-      if (!tabId) {
-        return;
-      }
-      const url = tabs[0].url;
-      if (url && url.indexOf('https://www.patreon.com/posts/') > -1) {
-        $('#not-patreon-site').hide();
-        $('#patreon-site').show();
-        parsePatreonData(tabId);
-      } else {
-        $('#not-patreon-site').show();
-        $('#patreon-site').hide();
-      }
+    {
+      active: true,
+      lastFocusedWindow: true
     },
+    (tabs) => {
+      const tabId = tabs[0]?.id?.toString();
+      if (!tabId) return;
+
+      notPatreonSite.hidden = true;
+      patreonSite.hidden = false;
+      parsePatreonData(tabId);
+    }
   );
 }
 
 function updateDownloadCount() {
   let count = files.length;
-  if (includeAvatar.is(':checked')) {
-    count += 1;
-  }
-  if (includeDescription.is(':checked')) {
-    count += 1;
-  }
+
+  if (includeAvatar?.checked) count += 1;
+  if (includeDescription?.checked) count += 1;
+
   if (count) {
-    downloadLink.prop('disabled', false);
-    downloadLink.text(`Download ${count} ${count === 1 ? 'file' : 'files'}`);
-    chrome.tabs.query({active: true, currentWindow: true}, function (tabs) {
-      chrome.tabs.sendMessage(tabs[0].id, ['Patreon Downloader | Files', files]);
-    });
+    if (downloadLink) {
+      downloadLink.disabled = false;
+      downloadLink.textContent = `Download ${count} ${count === 1 ? "file" : "files"}`;
+    }
+
+    chrome.tabs.query(
+      {
+        active: true,
+        currentWindow: true
+      },
+      function(tabs) {
+        chrome.tabs.sendMessage(tabs[0].id, ["Patreon Downloader | Files", files]);
+      }
+    );
   }
 }
 
 function parsePatreonData(tabId) {
-  chrome.storage.local.get(tabId, function (contentData) {
+  chrome.storage.local.get(tabId, function(contentData) {
     if (!contentData || !contentData[tabId]) {
-      console.error('Patreon Downloader | No post data found.');
+      notPatreonSite.hidden = false;
+      patreonSite.hidden = true;
+      console.error("Patreon Downloader | No post data found.");
       return;
     }
 
     contentData = contentData[tabId];
-    console.log('Patreon Downloader | Raw post data', contentData);
+    console.log("Patreon Downloader | Raw post data", contentData);
 
-    if (!contentData?.post?.data?.attributes) {
-      console.error('Patreon Downloader | Invalid post data found.');
+    if (!contentData?.data?.attributes) {
+      console.error("Patreon Downloader | Invalid post data found.");
       return;
     }
 
-    let text = contentData.post.data.attributes.title;
+    let text = contentData.data.attributes.title;
 
-    const campaignData = contentData.post.included.filter(o => o.type === 'campaign').map(o => {
-      return o.attributes;
-    });
+    const campaignData = contentData.included
+      .filter((o) => o.type === "campaign")
+      .map((o) => o.attributes);
+
     let postUser = {};
     if (campaignData.length) {
       postUser.name = campaignData[0].name;
@@ -89,23 +100,28 @@ function parsePatreonData(tabId) {
         text = `${postUser.name}-${text}`;
       }
     }
-    $('#zip-name').prop('value', `${slugify(text)}.zip`);
 
-    files = contentData.post.included.filter(o => o.type === 'media' || o.type === 'attachment').map(o => {
+    if (zipNameInput) zipNameInput.value = `${slugify(text)}.zip`;
+
+    files = contentData.included
+      .filter((o) => o.type === "media" || o.type === "attachment")
+      .map((o) => {
         let out = {
           filename: null,
           url: null,
         };
+
         switch (o.type) {
-          case 'media':
+          case "media":
             out.filename = o.attributes.file_name;
             out.url = o.attributes.download_url;
             break;
-          case 'attachment':
+          case "attachment":
             out.filename = o.attributes.name;
             out.url = o.attributes.url;
             break;
         }
+
         if (!out.filename && o.id) {
           // Try parsing the url as the filename
           try {
@@ -113,94 +129,106 @@ function parsePatreonData(tabId) {
             out.filename = `${o.id}-${url.pathname.split(/[\\/]/).pop()}`;
           } catch (e) {
             console.error(`Patreon Downloader | Error parsing URL ${out.url}`, e);
-            console.warn(`Patreon Downloader | Using ID ${o.id}.jpg as filename. This may not be correct and you may have to manually rename the file extension.`);
+            console.warn(
+              `Patreon Downloader | Using ID ${o.id}.jpg as filename. This may not be correct and you may have to manually rename the file extension.`
+            );
             out.filename = `${o.id}.jpg`;
           }
         }
+
         return out;
-      },
-    );
-    if (contentData.post.data.attributes?.post_type === 'video_external_file' && contentData.post.data.attributes?.post_file?.url) {
-      let filename = new URL(contentData.post.data.attributes.post_file.url).pathname.split('/').pop() || 'video';
+      });
+
+    if (contentData.data.attributes?.image?.url) {
+      let filename = new URL(contentData.data.attributes.image.url).pathname.split("/").pop();
       files.push({
         filename,
-        url: contentData.post.data.attributes.post_file.url,
+        url: contentData.data.attributes.image.url
+      });
+    }
+
+    if (contentData.data.attributes?.embed_url) {
+      let filename = "embed.txt";
+      files.push({
+        filename,
+        url: contentData.data.attributes.embed_url
       });
     }
 
     updateDownloadCount();
 
-    files.sort((a, b) => {
-      return a.filename.localeCompare(b.filename);
-    });
-    console.log('Patreon Downloader | Files', files);
+    files.sort((a, b) => a.filename.localeCompare(b.filename));
+    console.log("Patreon Downloader | Files", files);
 
-    $('#download').submit(e => {
+    downloadForm?.addEventListener("submit", (e) => {
       e.preventDefault();
 
       if (!files.length) {
-        console.info('Patreon Downloader | No files to download.');
+        console.info("Patreon Downloader | No files to download.");
         return;
       }
 
-      downloadLink.prop('disabled', true);
+      if (downloadLink) downloadLink.disabled = true;
 
       const requests = [];
 
-      if (includeDescription.prop('checked')) {
-        let content = [
-          `<h1 id="title">${contentData.post.data.attributes?.title}</h1>`,
-        ];
+      if (includeDescription?.checked) {
+        let content = [`<h1 id="title">${contentData.data.attributes?.title}</h1>`];
+
         if (postUser.name && postUser.url) {
-          content.push(
-            `<p>by <a href="${postUser.url}">${postUser.name}</a></p>`,
-          );
+          content.push(`<p>by <a href="${postUser.url}">${postUser.name}</a></p>`);
         }
-        const tags = contentData.post.included
+
+        const tags = contentData.included
           .filter((included) => included?.type === "post_tag" && included.attributes?.value)
           .map((included) => included.attributes.value);
-        if (contentData.post.data?.attributes?.published_at) {
+
+        if (contentData.data?.attributes?.published_at) {
+          content.push(`<p id="published-at">${contentData.data.attributes.published_at}</p>`);
+        }
+        if (contentData.data?.attributes?.content) {
+          content.push(`<p id="content">${contentData.data.attributes.content}</p>`);
+        }
+        if (tags?.length) {
           content.push(
-            `<p id="published-at">${contentData.post.data.attributes.published_at}</p>`,
+            `<p id="tags">${tags.map((tag) => `<span class="tag">${tag}</span>`)
+              .join(" | ")}</p>`
           );
         }
-        if (contentData.post.data?.attributes?.content) {
+        if (contentData.data?.attributes?.url) {
           content.push(
-            `<p id="content">${contentData.post.data.attributes.content}</p>`,
+            `<p id="url"><a href="${contentData.data.attributes.url}">${contentData.data.attributes.url}</a></p>`
+          );
+        } else if (contentData.pageURL) {
+          content.push(
+            `<p id="url"><a href="${contentData.pageURL}">${contentData.pageURL}</a></p>`
           );
         }
-        if (tags) {
-          content.push(
-            `<p id="tags">${tags.map((tag)=>`<span class="tag">${tag}</span>`).join(" | ")}</p>`,
-          );
-        }
-        if (contentData.post.data?.attributes?.url) {
-          content.push(
-            `<p id="url"><a href="${contentData.post.data.attributes.url}">${contentData.post.data.attributes.url}</a></p>`,
-          );
-        }
-        let blob = new Blob(content, {type: 'text/html'});
-        let url = URL.createObjectURL(blob);
-        let filename = 'description.html';
-        requests.push({url: url, filename: filename});
+
+        const blob = new Blob(content, { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const filename = "description.html";
+        requests.push({
+          url,
+          filename
+        });
       }
 
-      if (postUser.avatarUrl && includeAvatar.prop('checked')) {
-        let filename = new URL(postUser.avatarUrl).pathname.split('/').pop();
-        let extension = filename.split('.').pop();
-        if (!extension) {
-          extension = 'png';
-        }
-        let file = `avatar.${extension}`;
+      if (postUser.avatarUrl && includeAvatar?.checked) {
+        let filename = new URL(postUser.avatarUrl).pathname.split("/").pop();
+        let extension = filename.split(".").pop();
+        if (!extension) extension = "png";
+
         requests.push({
-          filename: file,
-          url: postUser.avatarUrl,
+          filename: `avatar.${extension}`,
+          url: postUser.avatarUrl
         });
       }
 
       for (let i = 0; i < files.length; i++) {
         let filename = files[i].filename;
-        if (filename.startsWith('http')) {
+
+        if (filename.startsWith("http")) {
           try {
             // Handle full urls as the filename, pull the final segment out
             const url = new URL(filename);
@@ -215,19 +243,34 @@ function parsePatreonData(tabId) {
             }
           }
         }
-        const req = {
-          filename: filename,
-          url: files[i].url,
-        };
-        requests.push(req);
+
+        requests.push({
+          filename,
+          url: files[i].url
+        });
       }
 
-      chrome.tabs.query({active: true, currentWindow: true}, function (tabs) {
-        let zipName = $('#zip-name').val() || 'archive.zip';
-        if (!zipName.endsWith('.zip')) {
-          zipName += '.zip';
+      const seen = new Set();
+      const filteredRequests = requests.filter((request) => {
+        if (seen.has(request.url)) {
+          return false;
         }
-        chrome.tabs.sendMessage(tabs[0].id, {type: 'download', requests, zipName});
+        seen.add(request.url);
+        return true;
+      });
+
+      chrome.tabs.query({
+        active: true,
+        currentWindow: true
+      }, function(tabs) {
+        let zipName = zipNameInput?.value || "archive.zip";
+        if (!zipName.endsWith(".zip")) zipName += ".zip";
+
+        chrome.tabs.sendMessage(tabs[0].id, {
+          type: "download",
+          requests: filteredRequests,
+          zipName
+        });
       });
     });
   });
@@ -246,12 +289,12 @@ function HumanFileSize(bytes, si = true, dp = 1) {
   const thresh = si ? 1000 : 1024;
 
   if (Math.abs(bytes) < thresh) {
-    return bytes + ' B';
+    return `${bytes} B`;
   }
 
   const units = si
-                ? ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
-                : ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+    ? ["kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
+    : ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
   let u = -1;
   const r = 10 ** dp;
 
@@ -263,25 +306,41 @@ function HumanFileSize(bytes, si = true, dp = 1) {
     u < units.length - 1
     );
 
-  return bytes.toFixed(dp) + ' ' + units[u];
+  return `${bytes.toFixed(dp)} ${units[u]}`;
 }
 
 function slugify(text) {
-  return text.toString().toLowerCase().trim()
-    .normalize('NFD')         // separate accent from letter
-    .replace(/[\u0300-\u036f]/g, '') // remove all separated accents
-    .replace(/\s+/g, '-')            // replace spaces with -
-    .replace(/&/g, '-and-')          // replace & with 'and'
-    .replace(/[^\w\-]+/g, '')        // remove all non-word chars
-    .replace(/\-\-+/g, '-')          // replace multiple '-' with single '-'
-    .replace(/^-+/, '')              // Trim - from start of text
-    .replace(/-+$/, '');             // Trim - from end of text
+  const illegalRe = /[\/?<>\\:*|"]/g;
+  const controlRe = /[\x00-\x1f\x80-\x9f]/g;
+  const reservedRe = /^\.+$/;
+  const windowsReservedRe = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
+  const windowsTrailingRe = /[. ]+$/;
+  const dashLikeRe = /[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D]/g; // normalize common unicode dashes to "-"
+
+  return text.toString()
+    .trim()
+    .replace(dashLikeRe, "-")
+    .replace(/\s+/g, "-")   // replace spaces with -
+    .replace(/&/g, "-and-") // replace & with 'and'
+    .replace(/--+/g, "-")   // replace multiple '-' with single '-'
+    .replace(/^-+/, "")     // Trim - from start of text
+    .replace(/-+$/, "")     // Trim - from end of text
+    .replace(/\.+$/, "")     // Trim . from end of text
+    .replace(illegalRe, "")
+    .replace(controlRe, "")
+    .replace(reservedRe, "")
+    .replace(windowsReservedRe, "")
+    .replace(windowsTrailingRe, "");
 }
 
-(function () {
+(function() {
   try {
-    isPatreonPostSite();
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", isPatreonPostSite);
+    } else {
+      isPatreonPostSite();
+    }
   } catch (e) {
-    console.error('Patreon Downloader |', e);
+    console.error("Patreon Downloader |", e);
   }
 })();
