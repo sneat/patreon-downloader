@@ -113,11 +113,11 @@ function parsePatreonData(tabId) {
 
         switch (o.type) {
           case "media":
-            out.filename = o.attributes.file_name;
+            out.filename = o.id ? `${o.id}-${o.attributes.file_name}` : o.attributes.file_name;
             out.url = o.attributes.download_url;
             break;
           case "attachment":
-            out.filename = o.attributes.name;
+            out.filename = o.id ? `${o.id}-${o.attributes.name}` : o.attributes.name;
             out.url = o.attributes.url;
             break;
         }
