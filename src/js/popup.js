@@ -103,6 +103,7 @@ function parsePatreonData(tabId) {
 
     if (zipNameInput) zipNameInput.value = `${slugify(text)}.zip`;
 
+    const seenFiles = new Set();
     files = contentData.included
       .filter((o) => o.type === "media" || o.type === "attachment")
       .map((o) => {
@@ -113,11 +114,11 @@ function parsePatreonData(tabId) {
 
         switch (o.type) {
           case "media":
-            out.filename = o.id ? `${o.id}-${o.attributes.file_name}` : o.attributes.file_name;
+            out.filename = o.attributes.file_name;
             out.url = o.attributes.download_url;
             break;
           case "attachment":
-            out.filename = o.id ? `${o.id}-${o.attributes.name}` : o.attributes.name;
+            out.filename = o.attributes.name;
             out.url = o.attributes.url;
             break;
         }
@@ -126,7 +127,7 @@ function parsePatreonData(tabId) {
           // Try parsing the url as the filename
           try {
             const url = new URL(out.url);
-            out.filename = `${o.id}-${url.pathname.split(/[\\/]/).pop()}`;
+            out.filename = `${url.pathname.split(/[\\/]/).pop()}`;
           } catch (e) {
             console.error(`Patreon Downloader | Error parsing URL ${out.url}`, e);
             console.warn(
@@ -136,14 +137,41 @@ function parsePatreonData(tabId) {
           }
         }
 
+        if (seenFiles.has(out.filename)) {
+          const uniqueSuffix = out.id || Math.floor(Math.random() * 1e9);
+          const dotIndex = out.filename.lastIndexOf(".");
+          const baseName = dotIndex > 0 ? out.filename.slice(0, dotIndex) : out.filename;
+          const extension = dotIndex > 0 ? out.filename.slice(dotIndex) : "";
+          out.filename = `${baseName}-${uniqueSuffix}${extension}`;
+        }
+        seenFiles.add(out.filename);
+
         return out;
       });
 
     if (contentData.data.attributes?.image?.url) {
-      let filename = new URL(contentData.data.attributes.image.url).pathname.split("/").pop();
+      const imageUrl = contentData.data.attributes.image.url;
+
+      let filename = "image";
+      try {
+        filename = new URL(imageUrl).pathname.split("/")
+          .pop() || filename;
+      } catch {
+        // Fall back to default filename if the URL cannot be parsed
+      }
+
+      if (seenFiles.has(filename)) {
+        const uniqueSuffix = contentData.data.id || Math.floor(Math.random() * 1e9);
+        const dotIndex = filename.lastIndexOf(".");
+        const baseName = dotIndex > 0 ? filename.slice(0, dotIndex) : filename;
+        const extension = dotIndex > 0 ? filename.slice(dotIndex) : "";
+        filename = `${baseName}-${uniqueSuffix}${extension}`;
+      }
+      seenFiles.add(filename);
+
       files.push({
         filename,
-        url: contentData.data.attributes.image.url
+        url: imageUrl
       });
     }
 
