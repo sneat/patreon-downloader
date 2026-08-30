@@ -9,78 +9,103 @@ chrome.runtime.sendMessage({ type: "whoAmI" }).then((tabId) => {
 
 const extractPatreonData = () => {
   console.log("Patreon Downloader | Attempting to extract Patreon data from page.");
-  const campaignIdRegex = /"https:\/\/www.patreon.com\/api\/campaigns\/(\d+)"/gm;
-  const postIdRegex = /"https:\/\/www.patreon.com\/meta-image\/post\/(\d+)"/gm;
-  const campaignIdMatch = campaignIdRegex.exec(document.documentElement.innerHTML);
-  const postIdMatch = postIdRegex.exec(document.documentElement.innerHTML);
+
+  const pageHtml = document.documentElement?.innerHTML || "";
+  const canonicalUrl = document.querySelector('link[rel="canonical"]')?.href || "";
+  const postId = globalThis.PatreonPage?.extractPostId(
+    window.location.href,
+    canonicalUrl,
+    pageHtml,
+  );
+
+  function dispatchBootstrapData(detail) {
+    document.dispatchEvent(
+      new CustomEvent("pd-bootstrap-data", {
+        detail,
+      }),
+    );
+  }
 
   function fetchDataFromPage() {
     try {
-      // Content scripts run in an isolated world, so the page's __NEXT_DATA__ global
-      // is unreachable; read the serialized copy from the DOM instead.
-      const data = JSON.parse(document.getElementById("__NEXT_DATA__")?.innerText);
-      console.log("Patreon Downloader | Extracting Patreon data from embedded page data.");
-      const detail = data?.props?.pageProps?.bootstrapEnvelope?.pageBootstrap?.post;
-      document.dispatchEvent(
-        new CustomEvent("pd-bootstrap-data", {
-          detail: {
+      // Legacy Next.js pages exposed a __NEXT_DATA__ script.
+      const nextDataText = document.getElementById("__NEXT_DATA__")?.textContent;
+      if (nextDataText) {
+        const data = JSON.parse(nextDataText);
+        const detail = data?.props?.pageProps?.bootstrapEnvelope?.pageBootstrap?.post;
+        if (detail?.data?.attributes) {
+          console.log("Patreon Downloader | Extracted Patreon data from __NEXT_DATA__.");
+          dispatchBootstrapData({
             pageURL: window.location.href,
             ...detail,
-          },
-        }),
+          });
+          return;
+        }
+      }
+
+      // Patreon now renders individual posts through Next.js React Server
+      // Components (`self.__next_f`) rather than __NEXT_DATA__. Parse that
+      // serialized bootstrap as a no-network fallback.
+      const rscData = globalThis.PatreonPage?.extractPostDataFromNextFlight(
+        pageHtml,
+        window.location.href,
       );
+      if (rscData?.data?.attributes) {
+        console.log("Patreon Downloader | Extracted Patreon data from Next.js RSC bootstrap.");
+        dispatchBootstrapData(rscData);
+        return;
+      }
+
+      throw new Error("No supported Patreon bootstrap data found in page HTML.");
     } catch (e) {
       console.error("Patreon Downloader | Failed to extract Patreon data from page.", e);
-      document.dispatchEvent(new CustomEvent("pd-bootstrap-data", { detail: undefined }));
+      dispatchBootstrapData(undefined);
     }
   }
 
-  if (campaignIdMatch?.length > 1 && postIdMatch?.length > 1) {
-    const postId = postIdMatch[1];
-    const fetchOptions = {
-      method: "GET",
-      credentials: "include",
-      redirect: "follow",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    };
-    const params = new URLSearchParams({
-      "fields[post]": "content_json_string,embed,image,post_metadata,published_at,title,url",
-      "fields[post_tag]": "tag_type,value",
-      "fields[media]": "id,image_urls,display,download_url,metadata,file_name",
-      include: "images,attachment,media,attachments_media,campaign",
-      "json-api-version": "1.0",
-      "json-api-use-default-includes": "true",
-    });
-
-    const apiUrl = `https://www.patreon.com/api/posts/${postId}?${params}`;
-
-    fetch(apiUrl, fetchOptions)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`API responded with ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((data) => {
-        console.log("Patreon Downloader | Fetched Patreon bootstrap data from API.", data);
-        document.dispatchEvent(
-          new CustomEvent("pd-bootstrap-data", {
-            detail: {
-              pageURL: window.location.href,
-              ...data,
-            },
-          }),
-        );
-      })
-      .catch((error) => {
-        console.error("Error fetching Patreon data from API:", error);
-        fetchDataFromPage();
-      });
-  } else {
+  if (!postId) {
+    console.warn("Patreon Downloader | Could not determine Patreon post ID from this page.");
     fetchDataFromPage();
+    return;
   }
+
+  const fetchOptions = {
+    method: "GET",
+    credentials: "include",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  };
+  const params = new URLSearchParams({
+    "fields[post]": "content_json_string,embed,image,post_metadata,published_at,title,url",
+    "fields[post_tag]": "tag_type,value",
+    "fields[media]": "id,image_urls,display,download_url,metadata,file_name",
+    include: "images,attachment,media,attachments_media,campaign",
+    "json-api-version": "1.0",
+    "json-api-use-default-includes": "true",
+  });
+
+  const apiUrl = `https://www.patreon.com/api/posts/${postId}?${params}`;
+
+  fetch(apiUrl, fetchOptions)
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`API responded with ${response.status}`);
+      }
+      return response.json();
+    })
+    .then((data) => {
+      console.log("Patreon Downloader | Fetched Patreon bootstrap data from API.", data);
+      dispatchBootstrapData({
+        pageURL: window.location.href,
+        ...data,
+      });
+    })
+    .catch((error) => {
+      console.error("Patreon Downloader | Patreon API fetch failed; using page bootstrap.", error);
+      fetchDataFromPage();
+    });
 };
 
 const handleMaybeRouteChange = () => {
@@ -253,7 +278,7 @@ function doDownload(requests, filename) {
       console.error("Patreon Downloader | Failed to download.", data.url, data.error);
     },
     onDownloaded: (data) => {
-      dataZip.AddBlobToZip(data.blob, decodeURIComponent(fileDetails[data.url])).then(() => {
+      dataZip.AddBlobToZip(data.blob, decodeFilenameSafely(fileDetails[data.url])).then(() => {
         processed++;
         chrome.runtime.sendMessage({
           type: "downloadUpdate",
@@ -283,7 +308,12 @@ function doDownload(requests, filename) {
     for (const request of requests) {
       fileDetails[request.url] = request.filename;
     }
-    downloader.AddURLs(requests.map((r) => r.url));
+    downloader.AddURLs(
+      requests.map((request) => ({
+        url: request.url,
+        fallbackUrls: request.fallbackUrls || [],
+      })),
+    );
     downloader.Process().then(() => {
       dataZip.Complete();
       chrome.runtime.sendMessage({

@@ -134,6 +134,86 @@ function contentJsonToHtml(json) {
 }
 
 /**
+ * Build an ordered, duplicate-free list of usable URLs for a Patreon media item.
+ * Patreon's `download_url` is preferred because it is intended to represent the
+ * original downloadable asset. Newer post pages occasionally expose a first/hero
+ * image whose download URL is absent or fails while the display/image variants
+ * remain valid, so these are retained as transparent fallbacks.
+ * @param {object} attributes Patreon media attributes.
+ * @return {string[]}
+ */
+function getPatreonMediaDownloadCandidates(attributes = {}) {
+  const candidates = [
+    attributes.download_url,
+    attributes.display?.url,
+    attributes.image_urls?.original,
+    attributes.image_urls?.default_large,
+    attributes.image_urls?.url,
+    attributes.image_urls?.default,
+  ];
+
+  const seen = new Set();
+  return candidates.filter((value) => {
+    if (typeof value !== "string" || !value) return false;
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
+/**
+ * Return a stable key for Patreon image variants that point at the same original
+ * media asset. Patreon changes the transformation/token part of the URL between
+ * preview and download variants, but the post id + asset hash stay identical.
+ * @param {string} value
+ * @return {string}
+ */
+function patreonMediaAssetKey(value) {
+  if (!value) return "";
+
+  try {
+    const url = new URL(value);
+    const match = url.pathname.match(/\/patreon-media\/p\/post\/(\d+)\/([^/]+)\//i);
+    return match ? `${match[1]}:${match[2]}` : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Detect whether Patreon's post-level image URL is only a preview/transform of
+ * a media item that is already present in `included`. This prevents duplicate
+ * files such as `1.jpg` next to the correctly named original image.
+ * @param {string} imageUrl
+ * @param {Array<object>} included
+ * @return {boolean}
+ */
+function isDuplicatePatreonPostImage(imageUrl, included = []) {
+  if (!imageUrl) return false;
+
+  const imageKey = patreonMediaAssetKey(imageUrl);
+
+  for (const item of included || []) {
+    if (item?.type !== "media") continue;
+
+    const attributes = item.attributes || {};
+    const candidates = [
+      attributes.download_url,
+      attributes.display?.url,
+      ...Object.values(attributes.image_urls || {}),
+    ].filter((value) => typeof value === "string" && value);
+
+    for (const candidate of candidates) {
+      if (candidate === imageUrl) return true;
+      const candidateKey = patreonMediaAssetKey(candidate);
+      if (imageKey && candidateKey && imageKey === candidateKey) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Format bytes as human-readable text.
  * @see https://stackoverflow.com/a/14919494/191306
  * @param {number} bytes Number of bytes.
@@ -228,5 +308,8 @@ if (typeof module !== "undefined" && module.exports) {
     HumanFileSize,
     slugify,
     findOrphanedTabKeys,
+    getPatreonMediaDownloadCandidates,
+    patreonMediaAssetKey,
+    isDuplicatePatreonPostImage,
   };
 }

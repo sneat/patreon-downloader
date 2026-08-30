@@ -1,4 +1,21 @@
-/* exported Downloader */
+/* exported Downloader, decodeFilenameSafely */
+
+/**
+ * Decode a filename that may have come from a URL without letting a literal
+ * percent sign in a real Patreon filename (for example `100%ComfyUI.png`)
+ * throw URIError. Patreon API `file_name` values are already human-readable,
+ * so malformed/ordinary percent signs must be preserved verbatim.
+ * @param {unknown} value
+ * @return {string}
+ */
+function decodeFilenameSafely(value) {
+  const filename = String(value ?? "");
+  try {
+    return decodeURIComponent(filename);
+  } catch {
+    return filename;
+  }
+}
 class Downloader {
   /**
    * @param {number} concurrency - The number of concurrent downloads to process
@@ -78,20 +95,51 @@ class Downloader {
       }
 
       const resolveAsset = async (iterator) => {
-        for (let [, url] of iterator) {
-          // Keep the worker alive on failure so the remaining URLs still download.
-          try {
-            const blob = await this._download(url);
-            if (blob) {
-              this.onDownloaded({
-                url,
-                blob,
-              });
-            }
-          } catch (error) {
+        for (let [, item] of iterator) {
+          const primaryUrl = typeof item === "string" ? item : item?.url;
+          const fallbackUrls =
+            typeof item === "string" || !Array.isArray(item?.fallbackUrls) ? [] : item.fallbackUrls;
+          const candidates = [primaryUrl, ...fallbackUrls].filter(Boolean);
+
+          if (!candidates.length) {
             this.onError({
-              url,
-              error,
+              url: primaryUrl,
+              error: new Error("No usable download URL."),
+            });
+            continue;
+          }
+
+          let lastError = null;
+          let completed = false;
+
+          for (const candidateUrl of candidates) {
+            try {
+              const blob = await this._download(candidateUrl);
+              if (blob) {
+                this.onDownloaded({
+                  // Keep the primary URL as the logical asset key so callers
+                  // retain the original filename even when a fallback wins.
+                  url: primaryUrl,
+                  resolvedUrl: candidateUrl,
+                  blob,
+                });
+                completed = true;
+                break;
+              }
+            } catch (error) {
+              lastError = error;
+              console.warn(
+                "Patreon Downloader | Download URL failed; trying fallback if available.",
+                candidateUrl,
+                error,
+              );
+            }
+          }
+
+          if (!completed) {
+            this.onError({
+              url: primaryUrl,
+              error: lastError || new Error("All download URL variants failed."),
             });
           }
         }
@@ -145,6 +193,14 @@ class Downloader {
         });
       });
       oReq.addEventListener("load", () => {
+        // XHR fires `load` for HTTP errors too. Treat non-success responses as
+        // failures so the caller can retry a Patreon display/image fallback.
+        // Blob/object URLs may report status 0 even when the request succeeded.
+        if (oReq.status !== 0 && (oReq.status < 200 || oReq.status >= 300)) {
+          reject(new Error(`HTTP ${oReq.status} while downloading ${url}`));
+          return;
+        }
+
         this.onProgress({
           url,
           percentComplete: 100,
