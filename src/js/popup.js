@@ -124,13 +124,17 @@ function parsePatreonData(tabId) {
         let out = {
           filename: null,
           url: null,
+          fallbackUrls: [],
         };
 
         switch (o.type) {
-          case "media":
+          case "media": {
             out.filename = o.attributes.file_name;
-            out.url = o.attributes.download_url;
+            const candidates = getPatreonMediaDownloadCandidates(o.attributes);
+            out.url = candidates[0] || null;
+            out.fallbackUrls = candidates.slice(1);
             break;
+          }
           case "attachment":
             out.filename = o.attributes.name;
             out.url = o.attributes.url;
@@ -151,13 +155,22 @@ function parsePatreonData(tabId) {
           }
         }
 
+        if (!out.url) {
+          console.warn("Patreon Downloader | Skipping media/attachment without a usable URL.", o);
+          return null;
+        }
+
         out.filename = makeUniqueFilename(out.filename, seenFiles, o.id);
 
         return out;
-      });
+      })
+      .filter(Boolean);
 
-    if (contentData.data.attributes?.image?.url) {
-      const imageUrl = contentData.data.attributes.image.url;
+    const postImageUrl = contentData.data.attributes?.image?.url;
+    const postImageIsDuplicate = isDuplicatePatreonPostImage(postImageUrl, contentData.included);
+
+    if (postImageUrl && !postImageIsDuplicate) {
+      const imageUrl = postImageUrl;
 
       let filename = "image";
       try {
@@ -278,6 +291,7 @@ function parsePatreonData(tabId) {
         requests.push({
           filename,
           url: files[i].url,
+          fallbackUrls: files[i].fallbackUrls || [],
         });
       }
 
